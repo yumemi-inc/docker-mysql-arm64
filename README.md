@@ -1,4 +1,4 @@
-# docker-mysql-multiarch
+# docker-mysql-arm64
 
 > **Warning**  
 > This is not an official product of YUMEMI Inc.
