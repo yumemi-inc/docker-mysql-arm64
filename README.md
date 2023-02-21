@@ -1,7 +1,11 @@
 # docker-mysql-multiarch
 
-> **Warning**
+> **Warning**  
 > This is not an official product of YUMEMI Inc.
+
+> **Warning**  
+> This is not an official image of Oracle Inc. nor Docker Inc.
+> DO NOT USE IN PRODUCTION. Use official images in production instead.
 
 MySQL Docker Image with Arm64 architecture support for 5.7.
 
