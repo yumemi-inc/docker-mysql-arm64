@@ -78,7 +78,8 @@ RUN set -eux; \
 ENV MYSQL_MAJOR {{ env.version }}
 ENV MYSQL_VERSION {{ .debian.version }}
 
-COPY --from=builder *.deb .
+RUN mkdir /src
+COPY --from=builder /src/*.deb /src/
 
 # the "/var/lib/mysql" stuff here is because the mysql-server postinst doesn't have an explicit way to disable the mysql_install_db codepath besides having a database already "configured" (ie, stuff in /var/lib/mysql/mysql)
 # also, we set debconf keys to make APT a little quieter
@@ -89,7 +90,7 @@ RUN { \
 		echo mysql-community-server mysql-community-server/remove-test-db select false; \
 	} | debconf-set-selections \
 	&& apt-get update \
-	&& apt-get install -y *.deb \
+	&& apt-get install -y /src/*.deb \
 {{ if env.version == "5.7" then ( -}}
 # comment out a few problematic configuration values
 	&& find /etc/mysql/ -name '*.cnf' -print0 \
