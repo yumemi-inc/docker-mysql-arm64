@@ -1,3 +1,22 @@
+FROM debian:buster AS builder
+
+RUN mkdir /src
+WORKDIR /src
+
+RUN apt-get update && apt-get install -y bison cmake curl dpkg-dev devscripts g++ libaio-dev libncurses5-dev libnuma-dev libssl-dev libtirpc-dev pkg-config libldap2-dev libsasl2-dev zlib1g-dev libmecab-dev ldap-utils libsasl2-modules-gssapi-mit dh-systemd
+RUN curl -sSL https://repo.mysql.com/apt/debian/pool/mysql-5.7/m/mysql-community/mysql-community-source_{{ .debian.version }}_amd64.deb > mysql.deb && ar x mysql.deb && rm -f mysql.deb
+RUN tar xf data.tar.xz && dpkg-source --no-check -x ./usr/src/mysql/mysql-community_{{ .debian.version }}.dsc
+
+WORKDIR /src/mysql-community-{{ .version }}
+
+RUN sed -i 's/-DWITH_BOOST=\/usr\/global\/share -DWITH_GMOCK=\/usr\/global\/share/-DWITH_BOOST=\/usr\/global\/share -DWITH_GMOCK=\/usr\/global\/share -DDOWNLOAD_BOOST=1/g' ./debian/rules && \
+	sed -i 's/-DWITH_SSL=\/var\/lib\/pb2\/sb_1-9588974-1670437508.74\/dep2/-DWITH_SSL=system/g' ./debian/rules
+RUN debuild -us -uc
+
+WORKDIR /src
+
+# ---
+
 FROM debian:{{ .debian.suite }}-slim
 
 # add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
@@ -59,7 +78,7 @@ RUN set -eux; \
 ENV MYSQL_MAJOR {{ env.version }}
 ENV MYSQL_VERSION {{ .debian.version }}
 
-RUN echo 'deb [ signed-by=/etc/apt/keyrings/mysql.gpg ] http://repo.mysql.com/apt/debian/ {{ .debian.suite }} mysql-{{ env.version }}' > /etc/apt/sources.list.d/mysql.list
+COPY --from=builder *.deb .
 
 # the "/var/lib/mysql" stuff here is because the mysql-server postinst doesn't have an explicit way to disable the mysql_install_db codepath besides having a database already "configured" (ie, stuff in /var/lib/mysql/mysql)
 # also, we set debconf keys to make APT a little quieter
@@ -70,19 +89,15 @@ RUN { \
 		echo mysql-community-server mysql-community-server/remove-test-db select false; \
 	} | debconf-set-selections \
 	&& apt-get update \
-	&& apt-get install -y \
+	&& apt-get install -y *.deb \
 {{ if env.version == "5.7" then ( -}}
-		mysql-server="${MYSQL_VERSION}" \
 # comment out a few problematic configuration values
 	&& find /etc/mysql/ -name '*.cnf' -print0 \
 		| xargs -0 grep -lZE '^(bind-address|log)' \
 		| xargs -rt -0 sed -Ei 's/^(bind-address|log)/#&/' \
 # don't reverse lookup hostnames, they are usually another container
 	&& echo '[mysqld]\nskip-host-cache\nskip-name-resolve' > /etc/mysql/conf.d/docker.cnf \
-{{ ) else ( -}}
-		mysql-community-client="${MYSQL_VERSION}" \
-		mysql-community-server-core="${MYSQL_VERSION}" \
-{{ ) end -}}
+{{ ) else "" end -}}
 	&& rm -rf /var/lib/apt/lists/* \
 	&& rm -rf /var/lib/mysql && mkdir -p /var/lib/mysql /var/run/mysqld \
 	&& chown -R mysql:mysql /var/lib/mysql /var/run/mysqld \
